@@ -3,6 +3,7 @@ package com.ecommerce.ecommerce.service;
 import com.ecommerce.ecommerce.model.UserLogin;
 import com.ecommerce.ecommerce.repository.UserLoginRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -13,20 +14,22 @@ public class UserLoginService {
     @Autowired
     private UserLoginRepository userLoginRepository;
 
+    @Autowired
+    private BCryptPasswordEncoder passwordEncoder;
+
     /*
      * Authenticate a user by checking if the username and password match.
-     * In a real-world application, ensure that the password is hashed and salted.
+     * Uses hashed password for secure authentication.
      */
     public boolean authenticateUser(String username, String password) {
         Optional<UserLogin> userLogin = userLoginRepository.findByUsername(username);
 
         // If user exists and the password matches, return true, otherwise false
-        return userLogin.isPresent() && userLogin.get().getPassword().equals(password);
+        return userLogin.isPresent() && passwordEncoder.matches(password, userLogin.get().getPassword());
     }
 
     /*
-     * Register a new user. This could include validation logic to check if
-     * the username is unique, the password is strong enough, etc.
+     * Register a new user. Checks if the username is unique before saving.
      */
     public UserLogin registerUser(UserLogin userLogin) {
         // Check if the username already exists
@@ -34,20 +37,20 @@ public class UserLoginService {
             throw new IllegalArgumentException("Username already exists");
         }
 
-        // In a real-world app, you would hash and salt the password before saving
-        // Save the user to the repository
+        // Hash and salt the password before saving
+        userLogin.setPassword(passwordEncoder.encode(userLogin.getPassword()));
         return userLoginRepository.save(userLogin);
     }
 
     /*
-     * Find a user by their username
+     * Find a user by their username.
      */
     public Optional<UserLogin> getUserLoginByUsername(String username) {
         return userLoginRepository.findByUsername(username);
     }
 
     /*
-     * Logout logic can be handled by setting the user session inactive or
+     * Logout logic can be handled by marking the user inactive or
      * performing any other business logic as needed.
      */
     public void logoutUser(String username) {
@@ -62,6 +65,7 @@ public class UserLoginService {
 
     /*
      * Update a user's information (like password, email, etc.).
+     * The password should be hashed before saving.
      */
     public UserLogin updateUser(Long userId, UserLogin updatedUser) {
         Optional<UserLogin> existingUser = userLoginRepository.findById(userId);
@@ -69,8 +73,12 @@ public class UserLoginService {
         if (existingUser.isPresent()) {
             UserLogin user = existingUser.get();
             user.setEmail(updatedUser.getEmail());
-            user.setPassword(updatedUser.getPassword()); // In real apps, hash it!
             user.setActive(updatedUser.isActive());
+
+            // Hash the new password if it has been changed
+            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
+                user.setPassword(passwordEncoder.encode(updatedUser.getPassword()));
+            }
 
             return userLoginRepository.save(user);
         } else {
